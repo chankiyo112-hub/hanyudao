@@ -279,10 +279,17 @@ VIEWS.home = () => {
       }).join("")}
     </div>` : ""}
 
+    <h3 style="margin:4px 0 10px">学習メニュー</h3>
     <div class="grid3">
       <div class="card clickable" data-route="vocab"><h3>📚 単語</h3><p class="muted">SRSフラッシュカード・クイズ</p></div>
       <div class="card clickable" data-route="grammar"><h3>✏️ 文法</h3><p class="muted">了・过・着…アスペクト攻略</p></div>
       <div class="card clickable" data-route="scenes"><h3>💬 会話</h3><p class="muted">12シーン + AIロールプレイ</p></div>
+      <div class="card clickable" data-route="reading"><h3>📖 読解</h3><p class="muted">短文→中文→長文</p></div>
+      <div class="card clickable" data-route="listening"><h3>🎧 リスニング</h3><p class="muted">ディクテーション・シャドーイング</p></div>
+      <div class="card clickable" data-route="pron"><h3>🗣️ 発音</h3><p class="muted">四声・ピンイン・声調クイズ</p></div>
+      <div class="card clickable" data-route="roadmap"><h3>🗺️ ロードマップ</h3><p class="muted">A1→B2 4ステージ</p></div>
+      <div class="card clickable" data-route="review"><h3>🔁 復習</h3><p class="muted">忘却曲線で自動出題</p></div>
+      <div class="card clickable" data-route="settings"><h3>⚙️ 設定</h3><p class="muted">AI・音声・データ管理</p></div>
     </div>
   `;
 };
