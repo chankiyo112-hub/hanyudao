@@ -393,10 +393,11 @@ function renderWordList() {
   const words = APP_DATA.vocab.filter(v => v.lv === s.lv);
   SPEAK_REG = [];
   $("#view").innerHTML = `
-    <h1 class="page-title">📋 単語一覧（Lv${s.lv}）</h1>
+    <h1 class="page-title">📋 単語一覧（Lv${s.lv}・${words.length}語）</h1>
     <p class="page-sub"><a href="javascript:void 0" data-route="vocab">← 戻る</a></p>
+    <input type="text" id="wordSearch" placeholder="🔍 検索（漢字・ピンイン・意味）" style="margin-bottom:12px">
     <div class="card"><table class="word-table">
-      ${words.map(w => `<tr>
+      ${words.map(w => `<tr data-s="${esc((w.zh + w.py + w.ja).toLowerCase())}">
         <td class="w-zh">${esc(w.zh)} ${isMastered(w.id) ? "✅" : ""}</td>
         <td class="w-py">${esc(w.py)}</td>
         <td>${esc(w.ja)}</td>
@@ -404,6 +405,10 @@ function renderWordList() {
       </tr>`).join("")}
     </table></div>
   `;
+  $("#wordSearch").addEventListener("input", e => {
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll("tr[data-s]").forEach(r => { r.style.display = !q || r.dataset.s.includes(q) ? "" : "none"; });
+  });
 }
 
 // --- フラッシュカード ---
@@ -430,11 +435,11 @@ function renderFlash() {
       <div class="hanzi">${esc(w.zh)}</div>
       ${s.revealed ? `
         <div class="pinyin">${esc(w.py)}</div>
-        <div class="meaning">${esc(w.ja)} <span class="muted">〔${esc(w.pos)}〕</span></div>
-        <div class="example">${esc(w.ex.zh)}<br><span style="color:var(--primary)">${esc(w.ex.py)}</span><br>${esc(w.ex.ja)}</div>
+        <div class="meaning">${esc(w.ja)} ${w.pos ? `<span class="muted">〔${esc(w.pos)}〕</span>` : ""}${w.hsk ? `<span class="pill">HSK${w.hsk}</span>` : ""}</div>
+        ${w.ex ? `<div class="example">${esc(w.ex.zh)}<br><span style="color:var(--primary)">${esc(w.ex.py)}</span><br>${esc(w.ex.ja)}</div>` : ""}
       ` : `<div class="hint">タップして答えを表示</div>`}
     </div>
-    <div class="btn-row" style="justify-content:center">${spk(w.zh)} ${s.revealed ? spk(w.ex.zh) : ""}</div>
+    <div class="btn-row" style="justify-content:center">${spk(w.zh)} ${s.revealed && w.ex ? spk(w.ex.zh) : ""}</div>
     ${s.revealed ? `<div class="grade-row" style="margin-top:12px">
       <button class="g-again" data-act="gradeCard" data-q="0">もう一度<br><small>10分後</small></button>
       <button class="g-hard" data-act="gradeCard" data-q="1">難しい</button>
@@ -483,8 +488,8 @@ function renderQuiz() {
     </div>
     ${s.answered ? `
       <div class="card" style="margin-top:14px">
-        <b>${esc(w.zh)}</b>（${esc(w.py)}）＝ ${esc(w.ja)} ${spk(w.zh)}<br>
-        <span class="muted">${esc(w.ex.zh)} ― ${esc(w.ex.ja)}</span>
+        <b>${esc(w.zh)}</b>（${esc(w.py)}）＝ ${esc(w.ja)} ${spk(w.zh)}
+        ${w.ex ? `<br><span class="muted">${esc(w.ex.zh)} ― ${esc(w.ex.ja)}</span>` : ""}
       </div>
       <div class="btn-row"><button data-act="nextQuiz">次へ →</button></div>` : ""}
     <p style="margin-top:16px"><a href="javascript:void 0" data-route="vocab">← 中断して戻る</a></p>
@@ -881,7 +886,7 @@ function toneQuizBody(s) {
 VIEWS.review = () => {
   if (SESSION && SESSION.view === "vocab" && SESSION.mode === "flash") return renderFlash();
   const due = dueItems();
-  const dueWords = due.map(itemById).filter(x => x && x.zh && x.ex);
+  const dueWords = due.map(itemById).filter(x => x && x.zh);
   const weak = weakRanking(10);
   $("#view").innerHTML = `
     <h1 class="page-title">🔁 自動復習</h1>
@@ -1203,14 +1208,14 @@ const ACTIONS = {
   // 復習
   startReview() {
     const due = dueItems();
-    const words = due.map(itemById).filter(x => x && x.zh && x.ex);
+    const words = due.map(itemById).filter(x => x && x.zh);
     if (!words.length) return;
     SESSION = { view: "vocab", mode: "flash", lv: 0, queue: shuffle(words), idx: 0, revealed: false, total: words.length };
     render();
   },
   startWeakQuiz() {
     const weakIds = weakRanking(10).map(w => w.id);
-    const words = weakIds.map(itemById).filter(x => x && x.zh && x.ex);
+    const words = weakIds.map(itemById).filter(x => x && x.zh && x.ja);
     if (!words.length) return alert("苦手な単語がまだありません。");
     startQuizSession(0, "zh2ja", words);
   },

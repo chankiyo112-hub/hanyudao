@@ -9,8 +9,8 @@ const APP_DATA = {
 levels: [
   { id: 1, name: "入門",   hsk: "HSK 1",   kentei: "中検 準4級", cefr: "A1",    color: "#4caf7d" },
   { id: 2, name: "初級",   hsk: "HSK 2-3", kentei: "中検 4級",   cefr: "A1-A2", color: "#3d9be0" },
-  { id: 3, name: "初中級", hsk: "HSK 3-4", kentei: "中検 3級",   cefr: "A2-B1", color: "#e0a23d" },
-  { id: 4, name: "中級",   hsk: "HSK 4-5", kentei: "中検 2級〜準1級", cefr: "B1-B2", color: "#d95a4e" },
+  { id: 3, name: "初中級", hsk: "HSK 4",   kentei: "中検 3級",   cefr: "A2-B1", color: "#e0a23d" },
+  { id: 4, name: "中級",   hsk: "HSK 5",   kentei: "中検 2級〜準1級", cefr: "B1-B2", color: "#d95a4e" },
 ],
 
 // ---------------- 単語 ----------------
@@ -780,16 +780,16 @@ pronunciation: {
 // ---------------- ロードマップ ----------------
 roadmap: [
   { stage:1, lv:1, title:"入門 ― 中国語の土台を作る", cefr:"A1", hsk:"HSK 1", kentei:"中検 準4級",
-    goals:["ピンインと四声をマスターする","基本語順 SVO を体に入れる","挨拶・自己紹介ができる","入門単語 30語"],
+    goals:["ピンインと四声をマスターする","基本語順 SVO を体に入れる","挨拶・自己紹介ができる","入門単語 144語"],
     items:{ vocabLv:1, grammar:["g01","g02","g03","g15"], reading:["r01","r02"], scenes:["s01","s02"] } },
   { stage:2, lv:2, title:"初級 ― 日常のやりとりができる", cefr:"A1-A2", hsk:"HSK 2-3", kentei:"中検 4級",
-    goals:["完了の了・経験の过を使い分ける","買い物・カフェで注文できる","初級単語 30語","ディクテーションに挑戦"],
+    goals:["完了の了・経験の过を使い分ける","買い物・カフェで注文できる","初級単語 429語","ディクテーションに挑戦"],
     items:{ vocabLv:2, grammar:["g04","g05","g06","g08","g09","g11"], reading:["r03"], scenes:["s03","s04","s07","s10","s12"] } },
-  { stage:3, lv:3, title:"初中級 ― 旅行・生活で困らない", cefr:"A2-B1", hsk:"HSK 3-4", kentei:"中検 3級",
-    goals:["把構文・比較文を使いこなす","ホテル・病院・空港で対応できる","中文読解に慣れる","初中級単語 30語"],
+  { stage:3, lv:3, title:"初中級 ― 旅行・生活で困らない", cefr:"A2-B1", hsk:"HSK 4", kentei:"中検 3級",
+    goals:["把構文・比較文を使いこなす","ホテル・病院・空港で対応できる","中文読解に慣れる","初中級単語 602語"],
     items:{ vocabLv:3, grammar:["g07","g10","g12","g13"], reading:["r04","r05"], scenes:["s05","s06","s08","s11"] } },
-  { stage:4, lv:4, title:"中級 ― 意見を伝え議論できる", cefr:"B1-B2", hsk:"HSK 4-5", kentei:"中検 2級〜準1級",
-    goals:["受け身・補語表現をマスター","仕事の場面で中国語が使える","長文読解と要約","中級単語 30語","AI と自由会話"],
+  { stage:4, lv:4, title:"中級 ― 意見を伝え議論できる", cefr:"B1-B2", hsk:"HSK 5", kentei:"中検 2級〜準1級",
+    goals:["受け身・補語表現をマスター","仕事の場面で中国語が使える","長文読解と要約","中級単語 828語","AI と自由会話"],
     items:{ vocabLv:4, grammar:["g14","g16"], reading:["r06"], scenes:["s09"] } },
 ],
 
