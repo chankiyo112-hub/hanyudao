@@ -991,7 +991,9 @@ VIEWS.settings = () => {
       <input type="range" id="setRate" min="0.5" max="1.5" step="0.05" value="${S.settings.rate}" style="width:100%">
       <div class="btn-row"><button class="small secondary" data-act="testVoice">🔊 テスト再生（你好，很高兴认识你）</button></div>
       <p class="notice" style="margin-top:10px">📱 スマホで音が出ない場合：<b>iPhoneは本体横の消音スイッチ（マナーモード）をオフ</b>にしてください。あわせてメディア音量も確認を。Androidで中国語音声が無い場合は「設定→システム→言語」からGoogle TTSの中国語をインストールしてください。</p>
-      ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">中国語の音声が見つかりません。macOSの場合「システム設定 → アクセシビリティ → 読み上げコンテンツ」で中国語ボイス（Tingting等）を追加してください。</p>`}
+      ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">⚠️ 中国語の音声が見つかりません。<br>
+        <b>Android（Galaxy等）</b>：Playストアで「Google スピーチサービス」を入手 → 設定→一般管理→テキスト読み上げ で優先エンジンを<b>Google</b>に変更 → ⚙️→音声データをインストール→中国語（中国）→ ブラウザを再起動。Samsung Internetではなく<b>Chrome</b>で開いてください。<br>
+        <b>macOS</b>：システム設定 → アクセシビリティ → 読み上げコンテンツ で中国語ボイス（Tingting等）を追加してください。</p>`}
     </div>
     <div class="card">
       <h3>💾 データ管理</h3>
