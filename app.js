@@ -130,10 +130,15 @@ if (!("speechSynthesis" in window)) {
   window.speechSynthesis = { cancel() {}, speak() {}, getVoices() { return []; }, onvoiceschanged: null };
 }
 let VOICES = [];
-function refreshVoices() { VOICES = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().startsWith("zh")); }
+function refreshVoices() { VOICES = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().replace("_", "-").startsWith("zh")); }
 if ("speechSynthesis" in window) {
   refreshVoices();
-  speechSynthesis.onvoiceschanged = refreshVoices;
+  // Android Chrome等ではボイス一覧が遅れて届くため、届いたら設定画面を描き直す
+  speechSynthesis.onvoiceschanged = () => {
+    const before = VOICES.length;
+    refreshVoices();
+    if (VOICES.length !== before && typeof ROUTE !== "undefined" && ROUTE === "settings") render();
+  };
 }
 // モバイルブラウザ対策：
 // - iOS/Androidは「ユーザー操作の中で一度speakする」まで音声がアンロックされない
@@ -966,6 +971,7 @@ function chatBubble(m) {
 
 // ---------------- 設定 ----------------
 VIEWS.settings = () => {
+  refreshVoices(); // 表示時点の最新一覧を取得（モバイルでは遅れて増えることがある）
   const zhVoices = VOICES;
   $("#view").innerHTML = `
     <h1 class="page-title">⚙️ 設定</h1>
@@ -989,7 +995,11 @@ VIEWS.settings = () => {
       </select>
       <label class="field">標準再生速度：<span id="setRateVal">${S.settings.rate.toFixed(2)}x</span></label>
       <input type="range" id="setRate" min="0.5" max="1.5" step="0.05" value="${S.settings.rate}" style="width:100%">
-      <div class="btn-row"><button class="small secondary" data-act="testVoice">🔊 テスト再生（你好，很高兴认识你）</button></div>
+      <div class="btn-row">
+        <button class="small secondary" data-act="testVoice">🔊 テスト再生（你好，很高兴认识你）</button>
+        <button class="small secondary" data-act="reloadVoices">🔄 ボイス一覧を再読み込み</button>
+      </div>
+      <p class="muted" style="margin-top:8px">※ 一覧に何も出なくても「自動選択」のままテスト再生で中国語が鳴れば正常です（端末の読み上げエンジンが自動で使われます）。</p>
       <p class="notice" style="margin-top:10px">📱 スマホで音が出ない場合：<b>iPhoneは本体横の消音スイッチ（マナーモード）をオフ</b>にしてください。あわせてメディア音量も確認を。Androidで中国語音声が無い場合は「設定→システム→言語」からGoogle TTSの中国語をインストールしてください。</p>
       ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">⚠️ 中国語の音声が見つかりません。<br>
         <b>Android（Galaxy等）</b>：Playストアで「Google スピーチサービス」を入手 → 設定→一般管理→テキスト読み上げ で優先エンジンを<b>Google</b>に変更 → ⚙️→音声データをインストール→中国語（中国）→ ブラウザを再起動。Samsung Internetではなく<b>Chrome</b>で開いてください。<br>
@@ -1279,6 +1289,12 @@ const ACTIONS = {
     S.settings.voiceURI = $("#setVoice").value;
     S.settings.rate = parseFloat($("#setRate").value);
     speak("你好，很高兴认识你！");
+  },
+  reloadVoices() {
+    // 無音発話でエンジンを起こしてから一覧を再取得（Android Chrome対策）
+    try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch (e) {}
+    refreshVoices();
+    setTimeout(() => { refreshVoices(); render(); }, 500);
   },
   exportData() {
     const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
