@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>汉语道 ― 日本語話者のための中国語学習</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <nav id="sidebar">
+    <div class="logo">汉语道<small>日本語話者のための中国語学習</small></div>
+    <a class="nav-item" data-route="home">🏠 ホーム</a>
+    <a class="nav-item" data-route="roadmap">🗺️ ロードマップ</a>
+    <a class="nav-item" data-route="vocab">📚 単語</a>
+    <a class="nav-item" data-route="grammar">✏️ 文法</a>
+    <a class="nav-item" data-route="reading">📖 読解</a>
+    <a class="nav-item" data-route="listening">🎧 リスニング</a>
+    <a class="nav-item" data-route="scenes">💬 会話</a>
+    <a class="nav-item" data-route="pron">🗣️ 発音</a>
+    <a class="nav-item" data-route="review">🔁 復習 <span class="badge" id="reviewBadge" style="display:none"></span></a>
+    <a class="nav-item" data-route="ai">🤖 AI</a>
+    <a class="nav-item" data-route="settings">⚙️ 設定</a>
+  </nav>
+
+  <main id="view"></main>
+
+  <nav id="bottomnav">
+    <a data-route="home"><span class="icon">🏠</span>ホーム</a>
+    <a data-route="vocab"><span class="icon">📚</span>単語</a>
+    <a data-route="review"><span class="icon">🔁</span>復習<span class="badge" id="reviewBadgeM" style="display:none"></span></a>
+    <a data-route="scenes"><span class="icon">💬</span>会話</a>
+    <a data-route="ai"><span class="icon">🤖</span>AI</a>
+  </nav>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
