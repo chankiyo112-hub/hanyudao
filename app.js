@@ -161,9 +161,15 @@ document.addEventListener("touchend", unlockTTS, { capture: true });
 function makeUtterance(text, rate) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "zh-CN";
-  const v = VOICES.find(x => x.voiceURI === S.settings.voiceURI) || VOICES.find(x => x.lang === "zh-CN") || VOICES[0];
+  // 選択ボイス→標準中国語ボイス（Tingting等）→novelty系以外→先頭 の順で選ぶ
+  const std = VOICES.filter(x => x.lang.replace("_", "-") === "zh-CN");
+  const v = VOICES.find(x => x.voiceURI === S.settings.voiceURI)
+    || std.find(x => /tingting|婷婷|ting-ting/i.test(x.name))
+    || std.find(x => !/eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|superstar|bahh|albert|bells|boing|bubbles|cellos|jester|organ|trinoids|whisper|wobble|zarvox/i.test(x.name))
+    || std[0] || VOICES[0];
   if (v) u.voice = v;
   u.rate = rate !== undefined ? rate : S.settings.rate;
+  u.volume = 1; // Safariで音量0が引き継がれるバグへの保険
   return u;
 }
 function speak(text, rate) {
