@@ -135,31 +135,53 @@ if ("speechSynthesis" in window) {
   refreshVoices();
   speechSynthesis.onvoiceschanged = refreshVoices;
 }
-function speak(text, rate) {
-  if (!("speechSynthesis" in window)) return alert("このブラウザは音声合成に対応していません。");
-  speechSynthesis.cancel();
+// モバイルブラウザ対策：
+// - iOS/Androidは「ユーザー操作の中で一度speakする」まで音声がアンロックされない
+// - iOSは発話中のUtteranceがGCされると音が途中で止まるため参照を保持する
+// - cancel()直後のspeak()が無視されることがあるため少し遅らせる
+let CURRENT_UTTER = null;
+let TTS_UNLOCKED = false;
+function unlockTTS() {
+  if (TTS_UNLOCKED || !("speechSynthesis" in window)) return;
+  TTS_UNLOCKED = true;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+document.addEventListener("pointerdown", unlockTTS, { capture: true });
+document.addEventListener("touchend", unlockTTS, { capture: true });
+
+function makeUtterance(text, rate) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "zh-CN";
   const v = VOICES.find(x => x.voiceURI === S.settings.voiceURI) || VOICES.find(x => x.lang === "zh-CN") || VOICES[0];
   if (v) u.voice = v;
   u.rate = rate !== undefined ? rate : S.settings.rate;
-  speechSynthesis.speak(u);
+  return u;
+}
+function speak(text, rate) {
+  if (!("speechSynthesis" in window)) return alert("このブラウザは音声合成に対応していません。");
+  refreshVoices(); // モバイルでは音声リストが遅れて読み込まれるため毎回更新
+  speechSynthesis.cancel();
+  const u = makeUtterance(text, rate);
+  CURRENT_UTTER = u;
+  setTimeout(() => speechSynthesis.speak(u), 60);
 }
 // 連続再生
 function speakSeq(texts, rate, gap = 700) {
+  refreshVoices();
   speechSynthesis.cancel();
   let i = 0;
   const next = () => {
     if (i >= texts.length) return;
-    const u = new SpeechSynthesisUtterance(texts[i++]);
-    u.lang = "zh-CN";
-    const v = VOICES.find(x => x.voiceURI === S.settings.voiceURI) || VOICES.find(x => x.lang === "zh-CN") || VOICES[0];
-    if (v) u.voice = v;
-    u.rate = rate !== undefined ? rate : S.settings.rate;
+    const u = makeUtterance(texts[i++], rate);
     u.onend = () => setTimeout(next, gap);
+    CURRENT_UTTER = u;
     speechSynthesis.speak(u);
   };
-  next();
+  setTimeout(next, 60);
 }
 
 // 🔊ボタン用レジストリ（中国語テキストをHTML属性に埋め込まない）
@@ -961,6 +983,7 @@ VIEWS.settings = () => {
       <label class="field">標準再生速度：<span id="setRateVal">${S.settings.rate.toFixed(2)}x</span></label>
       <input type="range" id="setRate" min="0.5" max="1.5" step="0.05" value="${S.settings.rate}" style="width:100%">
       <div class="btn-row"><button class="small secondary" data-act="testVoice">🔊 テスト再生（你好，很高兴认识你）</button></div>
+      <p class="notice" style="margin-top:10px">📱 スマホで音が出ない場合：<b>iPhoneは本体横の消音スイッチ（マナーモード）をオフ</b>にしてください。あわせてメディア音量も確認を。Androidで中国語音声が無い場合は「設定→システム→言語」からGoogle TTSの中国語をインストールしてください。</p>
       ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">中国語の音声が見つかりません。macOSの場合「システム設定 → アクセシビリティ → 読み上げコンテンツ」で中国語ボイス（Tingting等）を追加してください。</p>`}
     </div>
     <div class="card">
