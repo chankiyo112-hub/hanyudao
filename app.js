@@ -261,6 +261,82 @@ function fmtPy(numPy) { // "ma1" -> "mā" / "ma5" -> "ma(軽)"
   return t === 5 ? base + "·軽" : toneMark(base, t);
 }
 
+// 声調記号つきピンイン → 音節トークン列（ピンイン入力クイズ用）
+const TONE_PARSE = {};
+for (const [v, marks] of Object.entries(TONE_MARKS)) {
+  [...marks].forEach((ch, i) => { TONE_PARSE[ch] = [v, i + 1]; });
+}
+let SYL_SET = null;
+function sylSet() {
+  if (!SYL_SET) SYL_SET = new Set(Object.keys(APP_DATA.syllables || {}));
+  return SYL_SET;
+}
+function pyToTokens(py) {
+  // "nǐ hǎo" -> [{disp:"ni",base:"ni",tone:3},{disp:"hao",base:"hao",tone:3}]（軽声=5、儿化=er:true）
+  const tokens = [];
+  const chunks = py.toLowerCase().split(/[\s\-'’·]+/).filter(Boolean);
+  const set = sylSet();
+  for (const chunk of chunks) {
+    let base = "";
+    const tones = [];
+    for (const ch of chunk) {
+      if (TONE_PARSE[ch]) { tones.push({ idx: base.length, tone: TONE_PARSE[ch][1] }); base += TONE_PARSE[ch][0]; }
+      else if (/[a-zü]/.test(ch)) base += ch;
+    }
+    let i = 0;
+    const chunkTokens = [];
+    while (i < base.length) {
+      let found = null;
+      for (let len = Math.min(6, base.length - i); len >= 1; len--) {
+        const cand = base.slice(i, i + len);
+        if (set.has(cand)) { found = cand; break; }
+      }
+      if (!found) {
+        if (base[i] === "r" && chunkTokens.length) { chunkTokens[chunkTokens.length - 1].er = true; i++; continue; }
+        found = base.slice(i); // 分割不能: 残りを1トークンに
+      }
+      const t = tones.find(x => x.idx >= i && x.idx < i + found.length);
+      chunkTokens.push({ disp: found, base: found.replace(/ü/g, "v"), tone: t ? t.tone : 5 });
+      i += found.length;
+    }
+    // 「r」単独音節は前の音節の儿化として併合（「er」は除く）
+    for (const tk of chunkTokens) {
+      if (tk.base === "r" && tokens.length + chunkTokens.indexOf(tk) > 0) {
+        const prev = chunkTokens[chunkTokens.indexOf(tk) - 1] || tokens[tokens.length - 1];
+        if (prev) { prev.er = true; continue; }
+      }
+      tokens.push(tk);
+    }
+  }
+  return tokens.filter(t => t.base !== "r" || tokens.length === 1);
+}
+function parseUserPy(s) {
+  // "ni3hao3" / "wan2r" / "lv4" などを音節トークン列に
+  s = s.toLowerCase().replace(/[\s'’\-]/g, "").replace(/u:/g, "v").replace(/ü/g, "v");
+  const tokens = [];
+  const re = /([a-z]+)([0-5])/g;
+  let m, lastEnd = 0;
+  while ((m = re.exec(s)) !== null) {
+    tokens.push({ base: m[1], tone: +m[2] === 0 ? 5 : +m[2] });
+    lastEnd = re.lastIndex;
+  }
+  const rest = s.slice(lastEnd);
+  if (rest === "r" && tokens.length) tokens[tokens.length - 1].er = true;
+  else if (rest) tokens.push({ base: rest, tone: -1 }); // 数字なし＝声調未入力
+  return tokens;
+}
+function pyTokOk(c, u) {
+  if (!c || !u) return false;
+  let ub = u.base, uer = !!u.er;
+  if (!uer && c.er && ub.endsWith("r") && ub.slice(0, -1) === c.base) { uer = true; ub = ub.slice(0, -1); }
+  if (ub !== c.base || !!c.er !== uer) return false;
+  if (u.tone === c.tone) return true;
+  // 変調（不bù/一yī）はどちらの声調でも正解扱い
+  if (c.base === "bu" && [2, 4].includes(u.tone) && [2, 4].includes(c.tone)) return true;
+  if (c.base === "yi" && [1, 2, 4].includes(u.tone) && [1, 2, 4].includes(c.tone)) return true;
+  return false;
+}
+
 // ---------------- 音声認識（発音チェック） ----------------
 function srSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 let REC = null;
@@ -1000,6 +1076,8 @@ VIEWS.pron = () => {
     </div>`).join("") + `<div class="notice">${esc(P.katakanaNote)}</div>`;
   } else if (s.tab === "quiz") {
     body = toneQuizBody(s);
+  } else if (s.tab === "type") {
+    body = pyTypeQuizBody(s);
   } else if (s.tab === "syllab") {
     body = syllabaryBody(s);
   } else if (s.tab === "check") {
@@ -1014,6 +1092,7 @@ VIEWS.pron = () => {
       <button class="${s.tab === "pinyin" ? "active" : ""}" data-act="pronTab" data-tab="pinyin">ピンイン攻略</button>
       <button class="${s.tab === "sandhi" ? "active" : ""}" data-act="pronTab" data-tab="sandhi">変調ルール</button>
       <button class="${s.tab === "quiz" ? "active" : ""}" data-act="pronTab" data-tab="quiz">🎧 声調クイズ</button>
+      <button class="${s.tab === "type" ? "active" : ""}" data-act="pronTab" data-tab="type">⌨️ ピンイン入力</button>
       <button class="${s.tab === "check" ? "active" : ""}" data-act="pronTab" data-tab="check">🎤 発音チェック</button>
     </div>
     ${body}
@@ -1167,6 +1246,49 @@ function toneQuizBody(s) {
       }).join("")}
     </div>
     ${q.answered ? `<div class="btn-row" style="justify-content:center"><button data-act="nextTone">次へ →</button></div>` : ""}
+  </div>`;
+}
+
+function pyTypeQuizBody(s) {
+  if (!s.pyq) {
+    const pool = APP_DATA.vocab.filter(w => w.py);
+    s.pyq = { items: pick(pool, 10), idx: 0, score: 0, answered: false, input: "" };
+  }
+  const q = s.pyq;
+  if (q.idx >= q.items.length) {
+    const msg = `スコア：${q.score} / ${q.items.length}`;
+    s.pyq = null;
+    return `<div class="card" style="text-align:center"><div class="result-big">${msg}</div>
+      <div class="btn-row" style="justify-content:center"><button data-act="pronTab" data-tab="type">もう一度</button></div></div>`;
+  }
+  const item = q.items[q.idx];
+  return `<div class="card" style="text-align:center">
+    <p class="muted">${q.idx + 1} / ${q.items.length}　スコア ${q.score}</p>
+    <div class="quiz-q">${esc(item.zh)}</div>
+    <p class="muted">${esc(item.ja)}</p>
+    <p class="muted" style="margin-top:10px">ピンインを声調番号つきで入力（例：nǐhǎo → <code>ni3hao3</code>、軽声は0、儿化は語末に r）</p>
+    <input type="text" id="pyInput" placeholder="例：ni3hao3" value="${esc(q.input || "")}" ${q.answered ? "disabled" : ""} style="text-align:center;font-size:18px" autocapitalize="off" autocomplete="off" spellcheck="false">
+    <div class="btn-row" style="justify-content:center">
+      ${q.answered ? `<button data-act="nextPyType">次へ →</button>` : `<button data-act="checkPyType">答え合わせ</button>`}
+    </div>
+    ${q.answered ? pyTypeResultHtml(item, q) : ""}
+  </div>`;
+}
+function pyTypeResultHtml(item, q) {
+  const c = q.correctToks, u = q.userToks;
+  return `<div style="margin-top:14px">
+    <p style="font-weight:700;color:${q.correct ? "var(--green)" : "#d95a4e"}">${q.correct ? "🎉 正解！" : "もう少し！"}</p>
+    <div style="overflow-x:auto"><table class="pron-check" style="margin:8px auto;border-collapse:collapse">
+      <tr>${c.map(ct => `<td style="font-size:18px;font-weight:700">${esc(ct.disp)}${ct.er ? "r" : ""}</td>`).join("")}</tr>
+      <tr>${c.map((ct, i) => {
+        const ut = u[i];
+        const ok = pyTokOk(ct, ut);
+        const disp = ut ? esc(ut.base) + (ut.er ? "r" : "") + (ut.tone >= 0 ? ut.tone : "?") : "—";
+        return `<td class="${ok ? "diff-ok" : "diff-ng"}">${disp}</td>`;
+      }).join("")}</tr>
+    </table></div>
+    ${u.length !== c.length ? `<p class="muted">音節の数が正解（${c.length}）と異なります（入力：${u.length}）</p>` : ""}
+    <p class="muted">正解：${esc(item.py)}</p>
   </div>`;
 }
 
@@ -1570,7 +1692,7 @@ const ACTIONS = {
   },
 
   // 発音
-  pronTab(d) { SESSION.tab = d.tab; if (d.tab === "quiz") SESSION.quiz = null; render(); },
+  pronTab(d) { SESSION.tab = d.tab; if (d.tab === "quiz") SESSION.quiz = null; if (d.tab === "type") SESSION.pyq = null; render(); },
   pickSyl(d) { SESSION.syl = d.s; SESSION.sylRec = null; render(); },
   sylSeq() {
     const tones = APP_DATA.syllables[SESSION.syl] || {};
@@ -1634,6 +1756,22 @@ const ACTIONS = {
     render();
   },
   nextTone() { const q = SESSION.quiz; q.idx++; q.answered = false; q.opts = null; q.picked = null; render(); },
+  checkPyType() {
+    const s = SESSION; const q = s.pyq; if (q.answered) return;
+    q.input = $("#pyInput").value;
+    const item = q.items[q.idx];
+    const correctToks = pyToTokens(item.py);
+    const userToks = parseUserPy(q.input);
+    const correct = correctToks.length === userToks.length && correctToks.every((c, i) => pyTokOk(c, userToks[i]));
+    q.correctToks = correctToks; q.userToks = userToks; q.correct = correct; q.answered = true;
+    if (correct) q.score++;
+    recordAnswer("pytype_" + item.zh, correct, "ピンイン入力：" + item.zh, "発音");
+    render();
+  },
+  nextPyType() {
+    const q = SESSION.pyq; q.idx++; q.answered = false; q.input = ""; q.correctToks = null; q.userToks = null;
+    render();
+  },
 
   // 漢字
   kanjiTab(d) { SESSION.tab = d.tab; if (d.tab === "quiz") SESSION.quiz = null; render(); },
