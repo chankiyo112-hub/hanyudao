@@ -170,8 +170,11 @@ function makeUtterance(text, rate) {
   if (v) u.voice = v;
   u.rate = rate !== undefined ? rate : S.settings.rate;
   u.volume = 1; // Safariで音量0が引き継がれるバグへの保険
+  u.onerror = e => { TTS_ERROR = (e.error || "unknown") + (v ? "（voice: " + v.name + "）" : "（voiceなし）"); if (ROUTE === "settings") render(); };
+  u.onstart = () => { TTS_ERROR = ""; };
   return u;
 }
+let TTS_ERROR = "";
 function speak(text, rate) {
   if (!("speechSynthesis" in window)) return alert("このブラウザは音声合成に対応していません。");
   refreshVoices(); // モバイルでは音声リストが遅れて読み込まれるため毎回更新
@@ -1015,7 +1018,7 @@ VIEWS.settings = () => {
         <button class="small secondary" data-act="reloadVoices">🔄 ボイス一覧を再読み込み</button>
       </div>
       <p class="muted" style="margin-top:8px">※ 一覧に何も出なくても「自動選択」のままテスト再生で中国語が鳴れば正常です（端末の読み上げエンジンが自動で使われます）。</p>
-      <p class="muted" style="margin-top:4px">🩺 診断：音声API ${"speechSynthesis" in window ? "対応" : "❌ 非対応"}／全ボイス ${("speechSynthesis" in window ? speechSynthesis.getVoices().length : 0)}個／中国語ボイス ${zhVoices.length}個${zhVoices.length ? "（" + esc(zhVoices[0].name) + " 等）" : ""}</p>
+      <p class="muted" style="margin-top:4px">🩺 診断：音声API ${"speechSynthesis" in window ? "対応" : "❌ 非対応"}／全ボイス ${("speechSynthesis" in window ? speechSynthesis.getVoices().length : 0)}個／中国語ボイス ${zhVoices.length}個${zhVoices.length ? "（" + esc(zhVoices[0].name) + " 等）" : ""}${TTS_ERROR ? `<br>⚠️ 直近の再生エラー：${esc(TTS_ERROR)}` : ""}</p>
       <p class="notice" style="margin-top:10px">📱 スマホで音が出ない場合：<b>iPhoneは本体横の消音スイッチ（マナーモード）をオフ</b>にしてください。あわせてメディア音量も確認を。Androidで中国語音声が無い場合は「設定→システム→言語」からGoogle TTSの中国語をインストールしてください。</p>
       ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">⚠️ 中国語の音声が見つかりません。<br>
         <b>Android（Galaxy等）</b>：Playストアで「Google スピーチサービス」を入手 → 設定→一般管理→テキスト読み上げ で優先エンジンを<b>Google</b>に変更 → ⚙️→音声データをインストール→中国語（中国）→ ブラウザを再起動。Samsung Internetではなく<b>Chrome</b>で開いてください。<br>
