@@ -127,7 +127,7 @@ function itemById(id) {
 // 音声API非対応環境（テスト・一部ブラウザ）でも動作するようスタブを用意
 if (!("speechSynthesis" in window)) {
   window.SpeechSynthesisUtterance = function () {};
-  window.speechSynthesis = { cancel() {}, speak() {}, getVoices() { return []; }, onvoiceschanged: null };
+  window.speechSynthesis = { cancel() {}, speak() {}, resume() {}, pause() {}, getVoices() { return []; }, speaking: false, pending: false, paused: false, onvoiceschanged: null };
 }
 let VOICES = [];
 function refreshVoices() { VOICES = speechSynthesis.getVoices().filter(v => v.lang.toLowerCase().replace("_", "-").startsWith("zh")); }
