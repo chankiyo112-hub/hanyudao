@@ -1499,7 +1499,8 @@ const ACTIONS = {
   listenTab(d) { SESSION.tab = d.tab; SESSION.item = null; SESSION.checked = false; SESSION.input = ""; render(); },
   startDict(d) {
     const lv = +d.lv;
-    const pool = lv ? APP_DATA.dictation.filter(x => x.lv === lv) : APP_DATA.dictation;
+    let pool = lv ? APP_DATA.dictation.filter(x => x.lv === lv) : APP_DATA.dictation;
+    if (!pool.length) pool = APP_DATA.dictation; // 該当レベルの文がなければ全体から出題
     SESSION.dictPool = shuffle(pool); SESSION.dictIdx = 0;
     SESSION.item = SESSION.dictPool[0]; SESSION.checked = false; SESSION.input = "";
     render(); speak(SESSION.item.zh, SESSION.rate);
