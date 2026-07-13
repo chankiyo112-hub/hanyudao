@@ -240,6 +240,76 @@ function spk(text, rate) {
   const i = SPEAK_REG.push({ text, rate }) - 1;
   return `<button class="spk" data-act="speak" data-i="${i}" title="再生">🔊</button>`;
 }
+function spkReg(text, rate) { return SPEAK_REG.push({ text, rate }) - 1; }
+
+// ---------------- ピンイン処理 ----------------
+const TONE_MARKS = { a: "āáǎà", e: "ēéěè", i: "īíǐì", o: "ōóǒò", u: "ūúǔù", "ü": "ǖǘǚǜ" };
+function toneMark(syl, tone) {
+  if (tone === 5) return syl; // 軽声
+  if (tone < 1 || tone > 4) return syl;
+  let idx = -1;
+  if (syl.includes("a")) idx = syl.indexOf("a");
+  else if (syl.includes("e")) idx = syl.indexOf("e");
+  else if (syl.includes("ou")) idx = syl.indexOf("o");
+  else { for (let i = syl.length - 1; i >= 0; i--) if ("iouü".includes(syl[i])) { idx = i; break; } }
+  if (idx < 0) return syl;
+  return syl.slice(0, idx) + TONE_MARKS[syl[idx]][tone - 1] + syl.slice(idx + 1);
+}
+function fmtPy(numPy) { // "ma1" -> "mā" / "ma5" -> "ma(軽)"
+  if (!numPy) return "?";
+  const base = numPy.slice(0, -1), t = +numPy.slice(-1);
+  return t === 5 ? base + "·軽" : toneMark(base, t);
+}
+
+// ---------------- 音声認識（発音チェック） ----------------
+function srSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+let REC = null;
+function recognizeZh(onResult, onErr) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return onErr("unsupported");
+  try {
+    const r = new SR();
+    r.lang = "zh-CN"; r.interimResults = false; r.maxAlternatives = 5;
+    let got = false;
+    r.onresult = ev => { got = true; onResult([...ev.results[0]].map(a => a.transcript)); };
+    r.onerror = ev => { got = true; onErr(ev.error); };
+    r.onend = () => { if (!got) onErr("no-speech"); };
+    REC = r; r.start();
+  } catch (e) { onErr(String(e)); }
+}
+// LCSで音節列を対応付け（長さが違っても採点できるように）
+function lcsAlign(a, b) {
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const pairs = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { pairs.push([i, j]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+  }
+  return pairs;
+}
+function scorePron(targetText, transcripts) {
+  const tChars = [...normZh(targetText)];
+  const tPy = tChars.map(c => APP_DATA.charPy[c] || null);
+  const tBase = tPy.map(p => p ? p.slice(0, -1) : "??");
+  let best = null;
+  for (const tr of transcripts) {
+    const hChars = [...normZh(tr)];
+    const hPy = hChars.map(c => APP_DATA.charPy[c] || null);
+    const hBase = hPy.map(p => p ? p.slice(0, -1) : "?!");
+    const pairs = lcsAlign(tBase, hBase);
+    const got = {}; let toneOk = 0;
+    for (const [i, j] of pairs) {
+      got[i] = hPy[j];
+      if (tPy[i] && hPy[j] && tPy[i].slice(-1) === hPy[j].slice(-1)) toneOk++;
+    }
+    const cand = { heard: tr, matched: pairs.length, toneOk, got };
+    if (!best || cand.matched * 10 + cand.toneOk > best.matched * 10 + best.toneOk) best = cand;
+  }
+  return { tChars, tPy, ...best };
+}
 
 // ---------------- ユーティリティ ----------------
 const $ = s => document.querySelector(s);
@@ -880,19 +950,142 @@ VIEWS.pron = () => {
     </div>`).join("") + `<div class="notice">${esc(P.katakanaNote)}</div>`;
   } else if (s.tab === "quiz") {
     body = toneQuizBody(s);
+  } else if (s.tab === "syllab") {
+    body = syllabaryBody(s);
+  } else if (s.tab === "check") {
+    body = pronCheckBody(s);
   }
   $("#view").innerHTML = `
     <h1 class="page-title">🗣️ 発音</h1>
     <p class="page-sub">声調（四声）・ピンイン・変調ルール。中国語学習の最重要基礎です。</p>
     <div class="tabs">
       <button class="${s.tab === "tones" ? "active" : ""}" data-act="pronTab" data-tab="tones">声調</button>
+      <button class="${s.tab === "syllab" ? "active" : ""}" data-act="pronTab" data-tab="syllab">🀄 音節表</button>
       <button class="${s.tab === "pinyin" ? "active" : ""}" data-act="pronTab" data-tab="pinyin">ピンイン攻略</button>
       <button class="${s.tab === "sandhi" ? "active" : ""}" data-act="pronTab" data-tab="sandhi">変調ルール</button>
       <button class="${s.tab === "quiz" ? "active" : ""}" data-act="pronTab" data-tab="quiz">🎧 声調クイズ</button>
+      <button class="${s.tab === "check" ? "active" : ""}" data-act="pronTab" data-tab="check">🎤 発音チェック</button>
     </div>
     ${body}
   `;
 };
+
+// ---------------- 音節表 ----------------
+const SYL_INITIALS = ["b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h", "j", "q", "x", "zh", "ch", "sh", "r", "z", "c", "s", "母音/y/w"];
+const SYL_FINAL_ORDER = ["a", "o", "e", "i", "u", "ü", "ai", "ei", "ao", "ou", "an", "en", "ang", "eng", "ong", "er", "ia", "ie", "iao", "iu", "ian", "in", "iang", "ing", "iong", "ua", "uo", "uai", "ui", "uan", "un", "uang", "ueng", "üe", "üan", "ün"];
+function splitInitial(syl) {
+  for (const i of ["zh", "ch", "sh"]) if (syl.startsWith(i)) return [i, syl.slice(2)];
+  if ("bpmfdtnlgkhjqxrzcs".includes(syl[0])) return [syl[0], syl.slice(1)];
+  return ["母音/y/w", syl];
+}
+function syllabaryBody(s) {
+  const groups = {};
+  for (const syl of Object.keys(APP_DATA.syllables)) {
+    const [ini, fin] = splitInitial(syl);
+    (groups[ini] = groups[ini] || []).push({ syl, fin });
+  }
+  for (const g of Object.values(groups)) {
+    g.sort((a, b) => {
+      const ai = SYL_FINAL_ORDER.indexOf(a.fin), bi = SYL_FINAL_ORDER.indexOf(b.fin);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.syl.localeCompare(b.syl);
+    });
+  }
+  let detail = "";
+  if (s.syl && APP_DATA.syllables[s.syl]) {
+    const tones = APP_DATA.syllables[s.syl];
+    const chars = [1, 2, 3, 4].filter(t => tones[t]).map(t => tones[t]);
+    detail = `<div class="card" style="border-color:var(--primary)">
+      <h3>「${esc(s.syl)}」の四声 <button class="small" data-act="sylSeq">▶ 四声を連続再生</button></h3>
+      <div class="tone4-grid">
+        ${[1, 2, 3, 4].map(t => tones[t]
+          ? `<button class="secondary" data-act="speak" data-i="${spkReg(tones[t], 0.75)}">${esc(toneMark(s.syl, t))}<br><span style="font-size:26px">${esc(tones[t])}</span><br><small class="muted">第${t}声</small></button>`
+          : `<button class="secondary" disabled>${esc(toneMark(s.syl, t))}<br><span style="font-size:26px">—</span><br><small class="muted">第${t}声なし</small></button>`).join("")}
+      </div>
+      ${srSupported() ? `<p class="muted" style="margin-bottom:6px">🎤 声調を選んで発音チェック（表示された漢字の音を発音してください）：</p>
+      <div class="btn-row" style="margin-top:0">
+        ${[1, 2, 3, 4].filter(t => tones[t]).map(t => `<button class="small secondary" data-act="checkSyl" data-t="${t}">🎤 第${t}声（${esc(tones[t])}）</button>`).join("")}
+      </div>` : `<p class="muted">🎤 このブラウザは音声認識非対応のため、発音チェックは使えません（Chrome推奨）。</p>`}
+      ${sylRecHtml(s)}
+    </div>`;
+  } else {
+    detail = `<div class="notice">音節をタップすると、その音節の<b>四声（第1〜4声）</b>を代表漢字つきで聞けます。🎤で自分の発音チェックもできます。</div>`;
+  }
+  return detail + `<div class="card">
+    ${SYL_INITIALS.filter(ini => groups[ini]).map(ini => `
+      <div class="syl-row"><span class="syl-ini">${esc(ini)}</span>
+        ${groups[ini].map(x => `<button class="syl-chip ${s.syl === x.syl ? "active" : ""}" data-act="pickSyl" data-s="${esc(x.syl)}">${esc(x.syl)}</button>`).join("")}
+      </div>`).join("")}
+  </div>`;
+}
+function sylRecHtml(s) {
+  const r = s.sylRec;
+  if (!r) return "";
+  if (r.status === "listening") return `<p style="margin-top:10px"><span class="rec-dot">●</span> 聞き取り中… 「${esc(r.ch)}」（${esc(toneMark(s.syl, r.t))}）と発音してください</p>`;
+  if (r.status === "error") return `<p class="muted" style="margin-top:10px">⚠️ 認識できませんでした（${esc(r.err)}）。もう一度、はっきり少し長めに発音してみてください。</p>`;
+  if (r.status === "done") {
+    const mark = r.sylOk && r.toneOk ? "🎉 完璧！音も声調も正解です" : r.sylOk ? "🟡 音は合っています。<b>声調</b>をもう一度（目標：第" + r.t + "声）" : "🔴 音が違って聞こえました";
+    return `<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px">
+      <p>${mark}</p>
+      <p class="muted">聞こえた音：${esc(r.heardPy || "?")}（${esc(r.heard || "—")}）／ 目標：${esc(toneMark(s.syl, r.t))}（${esc(r.ch)}）</p>
+    </div>`;
+  }
+  return "";
+}
+
+// ---------------- 発音チェック ----------------
+function pronCheckBody(s) {
+  if (!s.check) s.check = { target: null, result: null, busy: false };
+  const c = s.check;
+  if (!srSupported()) {
+    return `<div class="notice">⚠️ このブラウザは音声認識（Web Speech Recognition）に対応していません。<b>Chrome（PC/Android）</b>でお試しください。</div>`;
+  }
+  const target = c.target;
+  return `
+    <div class="card">
+      <h3>🎤 発音チェック</h3>
+      <p class="muted">お題を選んで🎤を押し、マイクに向かって発音してください。<b>「音」と「声調」を分けて採点</b>します（初回はマイクの許可が必要です）。</p>
+      <div class="btn-row">
+        <button class="small secondary" data-act="checkTopic" data-kind="word">🎲 単語のお題</button>
+        <button class="small secondary" data-act="checkTopic" data-kind="sent">🎲 文のお題</button>
+      </div>
+      ${target ? `
+        <div style="text-align:center;margin:16px 0">
+          <div style="font-size:30px;font-weight:700">${esc(target.zh)} ${spk(target.zh, 0.85)}</div>
+          ${target.py ? `<div style="color:var(--primary)">${esc(target.py)}</div>` : ""}
+          ${target.ja ? `<div class="muted">${esc(target.ja)}</div>` : ""}
+        </div>
+        <div class="btn-row" style="justify-content:center">
+          ${c.busy ? `<button disabled><span class="rec-dot">●</span> 聞き取り中…</button>` : `<button data-act="startCheck">🎤 発音する</button>`}
+        </div>
+      ` : `<p class="muted" style="margin-top:12px">↑ まず「お題」を選んでください。</p>`}
+      ${c.error ? `<p class="muted" style="margin-top:10px">⚠️ ${esc(c.error === "not-allowed" ? "マイクの使用が許可されていません。アドレスバーのマイクアイコンから許可してください。" : "認識できませんでした（" + c.error + "）。もう一度はっきり発音してみてください。")}</p>` : ""}
+      ${checkResultHtml(c)}
+    </div>`;
+}
+function checkResultHtml(c) {
+  const r = c.result;
+  if (!r) return "";
+  const n = r.tChars.length;
+  const sylPct = n ? Math.round(100 * r.matched / n) : 0;
+  const tonePct = r.matched ? Math.round(100 * r.toneOk / r.matched) : 0;
+  const verdict = sylPct >= 90 && tonePct >= 90 ? "🎉 素晴らしい発音です！" : sylPct >= 70 ? (tonePct >= 70 ? "👍 いい調子！細部を仕上げましょう" : "🟡 音は良いので、<b>声調</b>を意識しましょう") : "🔴 モデル音声をもう一度よく聞いて真似してみましょう";
+  return `<div style="margin-top:14px">
+    <p style="font-weight:700">${verdict}</p>
+    <p>音の正解率：<b>${sylPct}%</b>（${r.matched}/${n}音節）　声調の正解率：<b>${tonePct}%</b>（${r.toneOk}/${r.matched}）</p>
+    <p class="muted">聞こえた文：${esc(r.heard || "—")}</p>
+    <div style="overflow-x:auto"><table class="pron-check" style="margin-top:8px;border-collapse:collapse">
+      <tr>${r.tChars.map(ch => `<td style="font-size:20px;font-weight:700">${esc(ch)}</td>`).join("")}</tr>
+      <tr>${r.tChars.map((ch, i) => `<td class="muted">${esc(fmtPy(r.tPy[i]))}</td>`).join("")}</tr>
+      <tr>${r.tChars.map((ch, i) => {
+        const g = r.got[i];
+        if (!g) return `<td class="diff-ng">—</td>`;
+        const toneOk = r.tPy[i] && g.slice(-1) === r.tPy[i].slice(-1);
+        return `<td class="${toneOk ? "diff-ok" : "diff-ng"}">${esc(fmtPy(g))}</td>`;
+      }).join("")}</tr>
+    </table></div>
+    <p class="muted" style="margin-top:6px">上段＝お手本／下段＝あなたの発音（緑＝声調まで正解、赤＝声調違いまたは未検出）</p>
+  </div>`;
+}
 
 function toneQuizBody(s) {
   const P = APP_DATA.pronunciation;
@@ -1050,7 +1243,7 @@ VIEWS.settings = () => {
         <button class="small secondary" data-act="reloadVoices">🔄 ボイス一覧を再読み込み</button>
       </div>
       <p class="muted" style="margin-top:8px">※ 一覧に何も出なくても「自動選択」のままテスト再生で中国語が鳴れば正常です（端末の読み上げエンジンが自動で使われます）。</p>
-      <p class="muted" style="margin-top:4px">🩺 診断：音声API ${"speechSynthesis" in window ? "対応" : "❌ 非対応"}／全ボイス ${("speechSynthesis" in window ? speechSynthesis.getVoices().length : 0)}個／中国語ボイス ${zhVoices.length}個${zhVoices.length ? "（" + esc(zhVoices[0].name) + " 等）" : ""}${TTS_ERROR ? `<br>⚠️ 直近の再生エラー：${esc(TTS_ERROR)}` : ""}</p>
+      <p class="muted" style="margin-top:4px">🩺 診断：音声API ${"speechSynthesis" in window ? "対応" : "❌ 非対応"}／全ボイス ${("speechSynthesis" in window ? speechSynthesis.getVoices().length : 0)}個／中国語ボイス ${zhVoices.length}個${zhVoices.length ? "（" + esc(zhVoices[0].name) + " 等）" : ""}／音声認識 ${srSupported() ? "対応" : "非対応"}${TTS_ERROR ? `<br>⚠️ 直近の再生エラー：${esc(TTS_ERROR)}` : ""}</p>
       <p class="notice" style="margin-top:10px">📱 スマホで音が出ない場合：<b>iPhoneは本体横の消音スイッチ（マナーモード）をオフ</b>にしてください。あわせてメディア音量も確認を。Androidで中国語音声が無い場合は「設定→システム→言語」からGoogle TTSの中国語をインストールしてください。</p>
       ${zhVoices.length ? "" : `<p class="notice" style="margin-top:10px">⚠️ 中国語の音声が見つかりません。<br>
         <b>Android（Galaxy等）</b>：Playストアで「Google スピーチサービス」を入手 → 設定→一般管理→テキスト読み上げ で優先エンジンを<b>Google</b>に変更 → ⚙️→音声データをインストール→中国語（中国）→ ブラウザを再起動。Samsung Internetではなく<b>Chrome</b>で開いてください。<br>
@@ -1239,6 +1432,58 @@ const ACTIONS = {
 
   // 発音
   pronTab(d) { SESSION.tab = d.tab; if (d.tab === "quiz") SESSION.quiz = null; render(); },
+  pickSyl(d) { SESSION.syl = d.s; SESSION.sylRec = null; render(); },
+  sylSeq() {
+    const tones = APP_DATA.syllables[SESSION.syl] || {};
+    speakSeq([1, 2, 3, 4].filter(t => tones[t]).map(t => tones[t]), 0.7, 650);
+  },
+  checkSyl(d) {
+    const s = SESSION; const t = +d.t;
+    const ch = APP_DATA.syllables[s.syl][t];
+    s.sylRec = { status: "listening", t, ch };
+    render();
+    speechSynthesis.cancel();
+    recognizeZh(alts => {
+      let best = null;
+      for (const a of alts) {
+        for (const c of [...normZh(a)].slice(0, 2)) {
+          const py = APP_DATA.charPy[c];
+          if (!py) continue;
+          const base = py.slice(0, -1), tone = +py.slice(-1);
+          const cand = { sylOk: base === s.syl, toneOk: tone === t, heard: a, heardPy: fmtPy(py) };
+          const score = (cand.sylOk ? 2 : 0) + (cand.toneOk ? 1 : 0);
+          if (!best || score > best._s) best = { ...cand, _s: score };
+        }
+      }
+      s.sylRec = best ? { status: "done", t, ch, ...best } : { status: "error", err: "認識結果を解析できませんでした", t, ch };
+      render();
+    }, err => { s.sylRec = { status: "error", err, t, ch }; render(); });
+  },
+  checkTopic(d) {
+    const c = SESSION.check;
+    c.result = null; c.error = null;
+    if (d.kind === "word") {
+      const w = APP_DATA.vocab[Math.floor(Math.random() * APP_DATA.vocab.length)];
+      c.target = { zh: w.zh, py: w.py, ja: w.ja };
+    } else {
+      const t = APP_DATA.dictation[Math.floor(Math.random() * APP_DATA.dictation.length)];
+      c.target = { zh: t.zh, py: t.py, ja: t.ja };
+    }
+    render();
+    speak(c.target.zh, 0.85);
+  },
+  startCheck() {
+    const c = SESSION.check;
+    c.busy = true; c.error = null; c.result = null;
+    render();
+    speechSynthesis.cancel(); // お手本再生中なら止めてから聞き取る
+    recognizeZh(alts => {
+      c.busy = false;
+      c.result = scorePron(c.target.zh, alts);
+      recordAnswer("pron_" + normZh(c.target.zh).slice(0, 8), c.result.matched >= c.result.tChars.length * 0.7, "発音：" + c.target.zh, "発音");
+      render();
+    }, err => { c.busy = false; c.error = err; render(); });
+  },
   playTonesDemo() { speakSeq(["妈", "麻", "马", "骂"], 0.7, 800); },
   answerTone(d) {
     const q = SESSION.quiz; if (q.answered) return;

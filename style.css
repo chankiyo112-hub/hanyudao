@@ -262,3 +262,16 @@ nav#bottomnav { display: none; }
   .quiz-q { font-size: 24px; }
   .flashcard .hanzi { font-size: 40px; }
 }
+
+/* ---------- 音節表・発音チェック ---------- */
+.syl-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.syl-row:last-child { border-bottom: none; }
+.syl-ini { width: 44px; font-weight: 800; color: var(--primary); flex-shrink: 0; font-size: 15px; }
+button.syl-chip { background: var(--card); color: var(--text); border: 1.5px solid var(--border); padding: 4px 9px; font-size: 13.5px; border-radius: 8px; font-weight: 600; }
+button.syl-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.tone4-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.tone4-grid button { font-size: 17px; padding: 12px 4px; line-height: 1.5; }
+.rec-dot { color: #d95a4e; font-weight: 800; animation: recpulse 1s infinite; }
+@keyframes recpulse { 50% { opacity: .25; } }
+table.pron-check td { padding: 6px 9px; border-bottom: 1px solid var(--border); text-align: center; }
+@media (max-width: 760px) { .tone4-grid { grid-template-columns: repeat(2, 1fr); } }
