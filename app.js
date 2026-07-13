@@ -150,7 +150,7 @@ function unlockTTS() {
   if (TTS_UNLOCKED || !("speechSynthesis" in window)) return;
   TTS_UNLOCKED = true;
   try {
-    const u = new SpeechSynthesisUtterance(" ");
+    const u = new SpeechSynthesisUtterance(""); // 空文字なら即終了し、後続の再生を邪魔しない
     u.volume = 0;
     speechSynthesis.speak(u);
   } catch (e) {}
@@ -170,36 +170,55 @@ function makeUtterance(text, rate) {
   if (v) u.voice = v;
   u.rate = rate !== undefined ? rate : S.settings.rate;
   u.volume = 1; // Safariで音量0が引き継がれるバグへの保険
-  u.onerror = e => { TTS_ERROR = (e.error || "unknown") + (v ? "（voice: " + v.name + "）" : "（voiceなし）"); if (ROUTE === "settings") render(); };
+  u.onerror = e => {
+    TTS_ERROR = (e.error || "unknown") + (v ? "（voice: " + v.name + "）" : "（voiceなし）");
+    // キャンセルに巻き込まれて消された場合は一度だけ自動リトライ
+    if (e.error === "canceled" && u === CURRENT_UTTER && !u._retried) {
+      u._retried = true;
+      setTimeout(() => { if (u === CURRENT_UTTER) speakNow(u); }, 300);
+      return;
+    }
+    if (ROUTE === "settings") render();
+  };
   u.onstart = () => { TTS_ERROR = ""; };
   return u;
 }
 let TTS_ERROR = "";
+function speakNow(u) {
+  speechSynthesis.speak(u);
+  speechSynthesis.resume(); // Chromeがpaused状態で固まって無音になるバグへの対策
+}
 function speak(text, rate) {
   if (!("speechSynthesis" in window)) return alert("このブラウザは音声合成に対応していません。");
   refreshVoices(); // モバイルでは音声リストが遅れて読み込まれるため毎回更新
-  speechSynthesis.cancel();
   const u = makeUtterance(text, rate);
   CURRENT_UTTER = u;
-  setTimeout(() => {
-    speechSynthesis.speak(u);
-    speechSynthesis.resume(); // Chromeがpaused状態で固まって無音になるバグへの対策
-  }, 60);
+  // Chromeはcancel()直後のspeak()を飲み込むため、キャンセルが必要なときだけ長めに待つ
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setTimeout(() => speakNow(u), 250);
+  } else {
+    speakNow(u);
+  }
 }
 // 連続再生
 function speakSeq(texts, rate, gap = 700) {
+  if (!("speechSynthesis" in window)) return;
   refreshVoices();
-  speechSynthesis.cancel();
   let i = 0;
   const next = () => {
     if (i >= texts.length) return;
     const u = makeUtterance(texts[i++], rate);
     u.onend = () => setTimeout(next, gap);
     CURRENT_UTTER = u;
-    speechSynthesis.speak(u);
-    speechSynthesis.resume();
+    speakNow(u);
   };
-  setTimeout(next, 60);
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setTimeout(next, 250);
+  } else {
+    next();
+  }
 }
 
 // 🔊ボタン用レジストリ（中国語テキストをHTML属性に埋め込まない）
