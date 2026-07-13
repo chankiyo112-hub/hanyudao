@@ -172,11 +172,24 @@ function makeUtterance(text, rate) {
   u.volume = 1; // Safariで音量0が引き継がれるバグへの保険
   u.onerror = e => {
     TTS_ERROR = (e.error || "unknown") + (v ? "（voice: " + v.name + "）" : "（voiceなし）");
-    // キャンセルに巻き込まれて消された場合は一度だけ自動リトライ
-    if (e.error === "canceled" && u === CURRENT_UTTER && !u._retried) {
-      u._retried = true;
-      setTimeout(() => { if (u === CURRENT_UTTER) speakNow(u); }, 300);
-      return;
+    if ((e.error === "canceled" || e.error === "synthesis-failed") && u === CURRENT_UTTER) {
+      if (!u._retried) {
+        // リトライ1: 同じ設定でもう一度
+        u._retried = true;
+        setTimeout(() => { if (u === CURRENT_UTTER) speakNow(u); }, 300);
+        return;
+      }
+      if (!u._retriedNoVoice) {
+        // リトライ2: ボイス指定を外してブラウザ任せで再生（Chromeの特定ボイス失敗対策）
+        u._retriedNoVoice = true;
+        const u2 = new SpeechSynthesisUtterance(u.text);
+        u2.lang = "zh-CN"; u2.rate = u.rate; u2.volume = 1;
+        u2.onstart = () => { TTS_ERROR = ""; };
+        u2.onerror = e2 => { TTS_ERROR = (e2.error || "unknown") + "（voice指定なしでも失敗）"; if (ROUTE === "settings") render(); };
+        CURRENT_UTTER = u2;
+        setTimeout(() => speakNow(u2), 300);
+        return;
+      }
     }
     if (ROUTE === "settings") render();
   };
