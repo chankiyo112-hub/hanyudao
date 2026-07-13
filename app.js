@@ -370,6 +370,9 @@ VIEWS.home = () => {
       <div class="card stat-tile"><div class="num">${acc === null ? "―" : acc + "%"}</div><div class="lbl">正答率</div></div>
     </div>
 
+    ${missionCardHtml()}
+    ${heatmapHtml()}
+
     <div class="card">
       <h3>📊 推定レベル</h3>
       <span class="level-badge" style="background:var(--green)">CEFR ${est.cefr}</span>
@@ -377,12 +380,6 @@ VIEWS.home = () => {
       <span class="level-badge" style="background:var(--gold)">${est.kentei}</span>
       <p class="muted" style="margin-top:8px">語彙の定着状況とクイズ正答率から自動推定しています。</p>
     </div>
-
-    ${due ? `<div class="card" style="border-color:var(--gold)">
-      <h3>🔁 復習の時間です</h3>
-      <p>忘却曲線に基づき <b>${due}件</b> が復習期限を迎えています。</p>
-      <div class="btn-row"><button data-route="review">今すぐ復習する</button></div>
-    </div>` : ""}
 
     <div class="card">
       <h3>🤖 AIコーチからの提案</h3>
@@ -406,13 +403,66 @@ VIEWS.home = () => {
       <div class="card clickable" data-route="scenes"><h3>💬 会話</h3><p class="muted">12シーン + AIロールプレイ</p></div>
       <div class="card clickable" data-route="reading"><h3>📖 読解</h3><p class="muted">短文→中文→長文</p></div>
       <div class="card clickable" data-route="listening"><h3>🎧 リスニング</h3><p class="muted">ディクテーション・シャドーイング</p></div>
-      <div class="card clickable" data-route="pron"><h3>🗣️ 発音</h3><p class="muted">四声・ピンイン・声調クイズ</p></div>
+      <div class="card clickable" data-route="pron"><h3>🗣️ 発音</h3><p class="muted">四声・音節表・発音チェック</p></div>
+      <div class="card clickable" data-route="kanji"><h3>🈶 漢字</h3><p class="muted">簡体字対応・落とし穴単語</p></div>
       <div class="card clickable" data-route="roadmap"><h3>🗺️ ロードマップ</h3><p class="muted">A1→B2 4ステージ</p></div>
       <div class="card clickable" data-route="review"><h3>🔁 復習</h3><p class="muted">忘却曲線で自動出題</p></div>
       <div class="card clickable" data-route="settings"><h3>⚙️ 設定</h3><p class="muted">AI・音声・データ管理</p></div>
     </div>
   `;
 };
+
+// ---------------- デイリーミッション・学習カレンダー ----------------
+function missionStatus() {
+  const d = S.days[todayKey()] || {};
+  const due = dueItems().length;
+  return {
+    rev: due === 0, revLeft: due,
+    neu: d.neu || 0, neuDone: (d.neu || 0) >= 5,
+    dict: (d.dict || 0) > 0,
+  };
+}
+function missionCardHtml() {
+  const ms = missionStatus();
+  const all = ms.rev && ms.neuDone && ms.dict;
+  if (all) {
+    const day = touchDay();
+    if (!day.mDone) { day.mDone = true; save(); }
+  }
+  return `<div class="card" style="border-color:${all ? "var(--green)" : "var(--gold)"}">
+    <h3>${all ? "🎉 今日のミッション完了！お疲れさまでした" : "🎯 今日のミッション（約5分）"}</h3>
+    <div class="mission-row">${ms.rev ? "✅" : "⬜"} 復習キューをゼロにする
+      ${ms.rev ? "" : `<span class="muted">（あと${ms.revLeft}件）</span><button class="small" data-route="review">やる</button>`}</div>
+    <div class="mission-row">${ms.neuDone ? "✅" : "⬜"} 新しい単語を5語 <span class="muted">（${Math.min(ms.neu, 5)}/5）</span>
+      ${ms.neuDone ? "" : `<button class="small" data-act="missionNew">やる</button>`}</div>
+    <div class="mission-row">${ms.dict ? "✅" : "⬜"} 聞き取り（ディクテーション）1問
+      ${ms.dict ? "" : `<button class="small" data-act="missionDict">やる</button>`}</div>
+  </div>`;
+}
+function heatmapHtml(weeks = 16) {
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const first = new Date(t0);
+  first.setDate(t0.getDate() - t0.getDay() - (weeks - 1) * 7);
+  let cells = "";
+  for (let w = 0; w < weeks; w++) {
+    for (let dd = 0; dd < 7; dd++) {
+      const date = new Date(first);
+      date.setDate(first.getDate() + w * 7 + dd);
+      if (date > t0) { cells += `<div class="hm" style="visibility:hidden"></div>`; continue; }
+      const k = todayKey(date);
+      const v = S.days[k];
+      const mins = v ? Math.round((v.secs || 0) / 60) : 0;
+      const acts = v ? (v.answers || 0) : 0;
+      const lvl = !v || (mins === 0 && acts === 0) ? 0
+        : (mins >= 30 || acts >= 60) ? 4 : (mins >= 15 || acts >= 30) ? 3 : (mins >= 5 || acts >= 10) ? 2 : 1;
+      cells += `<div class="hm hm${lvl}${v && v.mDone ? " hm-star" : ""}" title="${date.getMonth() + 1}/${date.getDate()}：${mins}分・${acts}問${v && v.mDone ? "・ミッション達成🏅" : ""}"></div>`;
+    }
+  }
+  return `<div class="card"><h3>📅 学習カレンダー</h3>
+    <div class="hm-wrap"><div class="hm-grid" style="grid-template-rows:repeat(7,12px)">${cells}</div></div>
+    <p class="muted" style="margin-top:8px">色が濃いほど学習量が多い日。<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--gold)"></span> 金枠はミッション達成日。毎日マスを塗って草を育てましょう🌱</p>
+  </div>`;
+}
 
 function coachSuggestions() {
   const out = [];
@@ -1120,6 +1170,89 @@ function toneQuizBody(s) {
   </div>`;
 }
 
+// ---------------- 日中漢字対比 ----------------
+VIEWS.kanji = () => {
+  if (!SESSION || SESSION.view !== "kanji") SESSION = { view: "kanji", tab: "pairs" };
+  const s = SESSION;
+  const K = APP_DATA.kanji;
+  SPEAK_REG = [];
+  let body = "";
+  if (s.tab === "pairs") {
+    body = K.pairs.map(g => `<div class="card"><h3>${esc(g.title)}</h3><p class="muted">${esc(g.desc)}</p>
+      <div class="kanji-grid">
+        ${g.items.map(it => `<div class="kanji-cell">
+          <div class="kanji-cn">${esc(it.cn)}</div>
+          <div class="kanji-jp">日本：${esc(it.jp)}</div>
+          <div class="muted" style="font-size:12px">${esc(it.ex)}</div>
+        </div>`).join("")}
+      </div></div>`).join("");
+  } else if (s.tab === "radicals") {
+    body = `<div class="card"><h3>部首の簡略化パターン</h3>
+      <p class="muted">簡体字の部首は決まった形に置き換わっています。この12パターンを覚えると、初めて見る字も読めるようになります。</p>
+      <table class="word-table">${K.radicals.map(r => `<tr>
+        <td class="w-zh" style="font-size:24px">${esc(r.cn)}</td>
+        <td style="width:40%">${esc(r.jp)}</td>
+        <td class="muted">${esc(r.ex)}</td>
+      </tr>`).join("")}</table></div>`;
+  } else if (s.tab === "trap") {
+    body = `<div class="notice">同じ漢字なのに中国語では<b>意味がまったく違う</b>単語たち。日本語話者が最も誤解しやすいポイントです。クイズタブで定着させましょう。</div>
+      <div class="card"><table class="word-table">
+      ${K.falseFriends.map(f => `<tr>
+        <td class="w-zh">${esc(f.zh)}</td>
+        <td class="w-py">${esc(f.py)}</td>
+        <td><b>${esc(f.cn)}</b><br><span class="muted">${esc(f.ja)}</span></td>
+        <td style="width:44px">${spk(f.zh)}</td>
+      </tr>`).join("")}
+      </table></div>`;
+  } else if (s.tab === "quiz") {
+    body = trapQuizBody(s);
+  }
+  $("#view").innerHTML = `
+    <h1 class="page-title">🈶 日中漢字対比</h1>
+    <p class="page-sub">漢字が分かる日本語話者だからこそ効く、対応パターンと「落とし穴」対策。</p>
+    <div class="tabs">
+      <button class="${s.tab === "pairs" ? "active" : ""}" data-act="kanjiTab" data-tab="pairs">簡体字↔日本漢字</button>
+      <button class="${s.tab === "radicals" ? "active" : ""}" data-act="kanjiTab" data-tab="radicals">部首パターン</button>
+      <button class="${s.tab === "trap" ? "active" : ""}" data-act="kanjiTab" data-tab="trap">⚠️ 落とし穴単語</button>
+      <button class="${s.tab === "quiz" ? "active" : ""}" data-act="kanjiTab" data-tab="quiz">📝 落とし穴クイズ</button>
+    </div>
+    ${body}
+  `;
+};
+
+function trapQuizBody(s) {
+  const K = APP_DATA.kanji.falseFriends;
+  if (!s.quiz) s.quiz = { items: pick(K, 10), idx: 0, score: 0, answered: false };
+  const q = s.quiz;
+  if (q.idx >= q.items.length) {
+    const msg = `スコア：${q.score} / ${q.items.length}`;
+    s.quiz = null;
+    return `<div class="card" style="text-align:center"><div class="result-big">${msg}</div>
+      <p class="muted">間違えた単語は苦手ランキングに記録されました。</p>
+      <div class="btn-row" style="justify-content:center"><button data-act="kanjiTab" data-tab="quiz">もう一度</button></div></div>`;
+  }
+  const item = q.items[q.idx];
+  if (!q.opts) {
+    const trap = (item.ja.match(/「(.+?)」/) || [, "日本語と同じ意味"])[1];
+    const others = pick(K.filter(x => x !== item), 2).map(x => x.cn);
+    q.opts = shuffle([item.cn, trap, ...others]);
+  }
+  return `<div class="card" style="text-align:center">
+    <p class="muted">${q.idx + 1} / ${q.items.length}　スコア ${q.score}</p>
+    <div class="quiz-q">「${esc(item.zh)}」${spk(item.zh)}</div>
+    <p class="muted">（${esc(item.py)}）― 中国語での意味はどれ？</p>
+    <div class="quiz-opts" style="margin-top:12px">
+      ${q.opts.map((o, i) => {
+        let cls = "";
+        if (q.answered) { if (o === item.cn) cls = "correct"; else if (i === q.picked) cls = "wrong"; }
+        return `<button class="${cls}" data-act="answerTrap" data-i="${i}" ${q.answered ? "disabled" : ""}>${esc(o)}</button>`;
+      }).join("")}
+    </div>
+    ${q.answered ? `<p style="margin-top:12px">${esc(item.ja)}</p>
+      <div class="btn-row" style="justify-content:center"><button data-act="nextTrap">次へ →</button></div>` : ""}
+  </div>`;
+}
+
 // ---------------- 復習 ----------------
 VIEWS.review = () => {
   if (SESSION && SESSION.view === "vocab" && SESSION.mode === "flash") return renderFlash();
@@ -1283,8 +1416,12 @@ const ACTIONS = {
   gradeCard(d) {
     const s = SESSION; const w = s.queue[s.idx];
     const q = +d.q;
+    const isNew = !S.srs[w.id]; // ミッション計測（新規 or 復習）
     srsGrade(w.id, q);
     recordAnswer(w.id, q >= 2, w.zh + "（" + w.ja + "）", "単語");
+    const day = touchDay();
+    if (isNew) day.neu = (day.neu || 0) + 1; else day.rev = (day.rev || 0) + 1;
+    save();
     if (q === 0) s.queue.push(w); // セッション内でも再出題
     s.idx++; s.revealed = false; render();
   },
@@ -1384,6 +1521,7 @@ const ACTIONS = {
     s.diffHtml = html;
     s.checked = true;
     recordAnswer("dict_" + normZh(s.item.zh), s.correct, "書き取り：" + s.item.zh, "リスニング");
+    const day = touchDay(); day.dict = (day.dict || 0) + 1; save();
     render();
   },
   revealDict() {
@@ -1495,6 +1633,31 @@ const ACTIONS = {
     render();
   },
   nextTone() { const q = SESSION.quiz; q.idx++; q.answered = false; q.opts = null; q.picked = null; render(); },
+
+  // 漢字
+  kanjiTab(d) { SESSION.tab = d.tab; if (d.tab === "quiz") SESSION.quiz = null; render(); },
+  answerTrap(d) {
+    const q = SESSION.quiz; if (q.answered) return;
+    const item = q.items[q.idx];
+    q.picked = +d.i; q.answered = true;
+    const correct = q.opts[q.picked] === item.cn;
+    if (correct) q.score++;
+    recordAnswer("trap_" + item.zh, correct, "落とし穴：" + item.zh + "（" + item.cn + "）", "漢字");
+    speak(item.zh);
+    render();
+  },
+  nextTrap() { const q = SESSION.quiz; q.idx++; q.answered = false; q.opts = null; q.picked = null; render(); },
+
+  // ミッション
+  missionNew() {
+    const l = APP_DATA.levels.find(l => APP_DATA.vocab.some(v => v.lv === l.id && !S.srs[v.id]));
+    navigate("vocab");
+    startFlashSession(l ? l.id : 1);
+  },
+  missionDict() {
+    navigate("listening");
+    ACTIONS.startDict({ lv: "0" });
+  },
 
   // 復習
   startReview() {

@@ -275,3 +275,17 @@ button.syl-chip.active { background: var(--primary); color: #fff; border-color: 
 @keyframes recpulse { 50% { opacity: .25; } }
 table.pron-check td { padding: 6px 9px; border-bottom: 1px solid var(--border); text-align: center; }
 @media (max-width: 760px) { .tone4-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---------- ミッション・カレンダー・漢字 ---------- */
+.mission-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 15px; flex-wrap: wrap; }
+.mission-row:last-child { border-bottom: none; }
+.hm-wrap { overflow-x: auto; padding-bottom: 4px; }
+.hm-grid { display: grid; grid-auto-flow: column; gap: 3px; width: max-content; }
+.hm { width: 12px; height: 12px; border-radius: 3px; background: var(--border); }
+.hm1 { background: #cde8d6; } .hm2 { background: #8fd3a8; }
+.hm3 { background: #4caf7d; } .hm4 { background: #1d7a4c; }
+.hm-star { outline: 2px solid var(--gold); outline-offset: -1px; }
+.kanji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.kanji-cell { border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+.kanji-cn { font-size: 32px; font-weight: 700; color: var(--primary); font-family: "PingFang SC", "Hiragino Sans GB", sans-serif; }
+.kanji-jp { font-size: 14px; font-weight: 600; margin: 2px 0 4px; }
