@@ -36,6 +36,39 @@
   </nav>
 </div>
 
+<div id="lockScreen">
+  <div class="card">
+    <div class="logo">汉语道</div>
+    <p style="color:var(--text-sub);font-size:14px;margin-bottom:16px">パスワードを入力してください</p>
+    <input type="password" id="lockPw" placeholder="パスワード" autocomplete="off" style="text-align:center">
+    <div class="btn-row" style="justify-content:center">
+      <button id="lockBtn" type="button">開く</button>
+    </div>
+    <p id="lockErr" style="display:none">パスワードが違います</p>
+    <label class="remember"><input type="checkbox" id="lockRemember" checked>この端末では次回から自動で開く</label>
+  </div>
+</div>
+<script>
+(function () {
+  var PW = "rovcat";
+  var KEY = "hanyudao_unlocked";
+  var lock = document.getElementById("lockScreen");
+  if (localStorage.getItem(KEY) === "1") { lock.style.display = "none"; return; }
+  function tryUnlock() {
+    var val = document.getElementById("lockPw").value;
+    if (val === PW) {
+      if (document.getElementById("lockRemember").checked) localStorage.setItem(KEY, "1");
+      lock.style.display = "none";
+    } else {
+      document.getElementById("lockErr").style.display = "block";
+    }
+  }
+  document.getElementById("lockBtn").addEventListener("click", tryUnlock);
+  document.getElementById("lockPw").addEventListener("keydown", function (e) { if (e.key === "Enter") tryUnlock(); });
+  document.getElementById("lockPw").focus();
+})();
+</script>
+
 <script src="data.js?v=20260713j"></script>
 <script src="vocab-extra.js?v=20260713j"></script>
 <script src="vocab6.js?v=20260713j"></script>

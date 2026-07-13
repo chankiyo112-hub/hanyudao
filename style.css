@@ -107,6 +107,19 @@ button.spk {
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
+/* ---------- ロック画面 ---------- */
+#lockScreen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+#lockScreen .card { width: 100%; max-width: 320px; text-align: center; }
+#lockScreen .logo { font-size: 22px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+#lockScreen label.remember { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; font-size: 13px; color: var(--text-sub); font-weight: 500; }
+#lockScreen label.remember input { width: auto; }
+#lockErr { color: var(--primary); font-size: 13px; margin-top: 10px; }
+
 /* ---------- フラッシュカード ---------- */
 .flashcard {
   background: var(--card); border: 2px solid var(--border);
