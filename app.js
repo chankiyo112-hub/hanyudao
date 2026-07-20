@@ -271,6 +271,19 @@ function sylSet() {
   if (!SYL_SET) SYL_SET = new Set(Object.keys(APP_DATA.syllables || {}));
   return SYL_SET;
 }
+// 音節表の代表漢字（多音字を含む）→ その升目が意図する読み。
+// charPy は文字ごとに1つの読みしか持てないため、「了」(le/liǎo) のような
+// 多音字は音節表の升目と食い違うことがある。音節表チェックではこちらを優先する。
+let SYL_CHAR_TONE = null;
+function sylCharTone() {
+  if (!SYL_CHAR_TONE) {
+    SYL_CHAR_TONE = {};
+    for (const [syl, tones] of Object.entries(APP_DATA.syllables || {})) {
+      for (const [t, ch] of Object.entries(tones)) SYL_CHAR_TONE[ch] = { base: syl, tone: +t };
+    }
+  }
+  return SYL_CHAR_TONE;
+}
 function pyToTokens(py) {
   // "nǐ hǎo" -> [{disp:"ni",base:"ni",tone:3},{disp:"hao",base:"hao",tone:3}]（軽声=5、儿化=er:true）
   const tokens = [];
@@ -1708,10 +1721,15 @@ const ACTIONS = {
       let best = null;
       for (const a of alts) {
         for (const c of [...normZh(a)].slice(0, 2)) {
-          const py = APP_DATA.charPy[c];
-          if (!py) continue;
-          const base = py.slice(0, -1), tone = +py.slice(-1);
-          const cand = { sylOk: base === s.syl, toneOk: tone === t, heard: a, heardPy: fmtPy(py) };
+          const override = sylCharTone()[c];
+          let base, tone;
+          if (override) { base = override.base; tone = override.tone; }
+          else {
+            const py = APP_DATA.charPy[c];
+            if (!py) continue;
+            base = py.slice(0, -1); tone = +py.slice(-1);
+          }
+          const cand = { sylOk: base === s.syl, toneOk: tone === t, heard: a, heardPy: fmtPy(base + tone) };
           const score = (cand.sylOk ? 2 : 0) + (cand.toneOk ? 1 : 0);
           if (!best || score > best._s) best = { ...cand, _s: score };
         }
