@@ -366,6 +366,35 @@ function recognizeZh(onResult, onErr) {
     REC = r; r.start();
   } catch (e) { onErr(String(e)); }
 }
+// マイク録音（自分の発音を後から聞けるように）。音声認識と並行して回す。
+function startMicRecording() {
+  const ctrl = { blobUrl: null, _stopCb: null, _stopped: false, _recorder: null, _done: false };
+  const finish = url => { ctrl._done = true; ctrl.blobUrl = url; if (ctrl._stopCb) ctrl._stopCb(url); };
+  if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    ctrl.stop = cb => cb(null);
+    return ctrl;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    if (ctrl._stopped) { stream.getTracks().forEach(t => t.stop()); finish(null); return; }
+    const chunks = [];
+    let rec;
+    try { rec = new MediaRecorder(stream); } catch (e) { stream.getTracks().forEach(t => t.stop()); finish(null); return; }
+    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      finish(chunks.length ? URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || "audio/webm" })) : null);
+    };
+    ctrl._recorder = rec;
+    rec.start();
+  }).catch(() => finish(null));
+  ctrl.stop = cb => {
+    ctrl._stopped = true;
+    if (ctrl._done) { cb(ctrl.blobUrl); return; }
+    ctrl._stopCb = cb;
+    if (ctrl._recorder && ctrl._recorder.state !== "inactive") ctrl._recorder.stop();
+  };
+  return ctrl;
+}
 // LCSで音節列を対応付け（長さが違っても採点できるように）
 function lcsAlign(a, b) {
   const n = a.length, m = b.length;
@@ -1169,6 +1198,7 @@ function sylRecHtml(s) {
     return `<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px">
       <p>${mark}</p>
       <p class="muted">聞こえた音：${esc(r.heardPy || "?")}（${esc(r.heard || "—")}）／ 目標：${esc(toneMark(s.syl, r.t))}（${esc(r.ch)}）</p>
+      ${r.audioUrl ? `<audio controls src="${esc(r.audioUrl)}" style="width:100%;margin-top:8px"></audio>` : ""}
     </div>`;
   }
   return "";
@@ -1176,7 +1206,7 @@ function sylRecHtml(s) {
 
 // ---------------- 発音チェック ----------------
 function pronCheckBody(s) {
-  if (!s.check) s.check = { target: null, result: null, busy: false };
+  if (!s.check) s.check = { target: null, result: null, busy: false, audioUrl: null };
   const c = s.check;
   if (!srSupported()) {
     return `<div class="notice">⚠️ このブラウザは音声認識（Web Speech Recognition）に対応していません。<b>Chrome（PC/Android）</b>でお試しください。</div>`;
@@ -1215,6 +1245,7 @@ function checkResultHtml(c) {
     <p style="font-weight:700">${verdict}</p>
     <p>音の正解率：<b>${sylPct}%</b>（${r.matched}/${n}音節）　声調の正解率：<b>${tonePct}%</b>（${r.toneOk}/${r.matched}）</p>
     <p class="muted">聞こえた文：${esc(r.heard || "—")}</p>
+    ${c.audioUrl ? `<div style="text-align:center;margin:10px 0"><p class="muted" style="margin-bottom:4px">🎧 自分の発音を聞く：</p><audio controls src="${esc(c.audioUrl)}" style="width:100%;max-width:320px"></audio></div>` : ""}
     <div style="overflow-x:auto"><table class="pron-check" style="margin-top:8px;border-collapse:collapse">
       <tr>${r.tChars.map(ch => `<td style="font-size:20px;font-weight:700">${esc(ch)}</td>`).join("")}</tr>
       <tr>${r.tChars.map((ch, i) => `<td class="muted">${esc(fmtPy(r.tPy[i]))}</td>`).join("")}</tr>
@@ -1714,9 +1745,12 @@ const ACTIONS = {
   checkSyl(d) {
     const s = SESSION; const t = +d.t;
     const ch = APP_DATA.syllables[s.syl][t];
+    if (s.sylRec && s.sylRec.audioUrl) URL.revokeObjectURL(s.sylRec.audioUrl);
     s.sylRec = { status: "listening", t, ch };
     render();
     speechSynthesis.cancel();
+    const mic = startMicRecording();
+    const attachAudio = () => mic.stop(url => { if (s.sylRec) { s.sylRec.audioUrl = url; render(); } });
     recognizeZh(alts => {
       let best = null;
       for (const a of alts) {
@@ -1736,11 +1770,13 @@ const ACTIONS = {
       }
       s.sylRec = best ? { status: "done", t, ch, ...best } : { status: "error", err: "認識結果を解析できませんでした", t, ch };
       render();
-    }, err => { s.sylRec = { status: "error", err, t, ch }; render(); });
+      attachAudio();
+    }, err => { s.sylRec = { status: "error", err, t, ch }; render(); attachAudio(); });
   },
   checkTopic(d) {
     const c = SESSION.check;
-    c.result = null; c.error = null;
+    if (c.audioUrl) URL.revokeObjectURL(c.audioUrl);
+    c.result = null; c.error = null; c.audioUrl = null;
     if (d.kind === "word") {
       const w = APP_DATA.vocab[Math.floor(Math.random() * APP_DATA.vocab.length)];
       c.target = { zh: w.zh, py: w.py, ja: w.ja };
@@ -1753,15 +1789,19 @@ const ACTIONS = {
   },
   startCheck() {
     const c = SESSION.check;
-    c.busy = true; c.error = null; c.result = null;
+    if (c.audioUrl) URL.revokeObjectURL(c.audioUrl);
+    c.busy = true; c.error = null; c.result = null; c.audioUrl = null;
     render();
     speechSynthesis.cancel(); // お手本再生中なら止めてから聞き取る
+    const mic = startMicRecording();
+    const attachAudio = () => mic.stop(url => { c.audioUrl = url; render(); });
     recognizeZh(alts => {
       c.busy = false;
       c.result = scorePron(c.target.zh, alts);
       recordAnswer("pron_" + normZh(c.target.zh).slice(0, 8), c.result.matched >= c.result.tChars.length * 0.7, "発音：" + c.target.zh, "発音");
       render();
-    }, err => { c.busy = false; c.error = err; render(); });
+      attachAudio();
+    }, err => { c.busy = false; c.error = err; render(); attachAudio(); });
   },
   playTonesDemo() { speakSeq(["妈", "麻", "马", "骂"], 0.7, 800); },
   answerTone(d) {
